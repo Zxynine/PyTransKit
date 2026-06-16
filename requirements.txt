@@ -12,3 +12,4 @@ h5py
 ipywidgets
 pandas
 seaborn
+jax

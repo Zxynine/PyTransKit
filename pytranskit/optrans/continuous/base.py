@@ -6,10 +6,7 @@ from ..utils import check_array, assert_equal_shape, interp2d, griddata2d
 class BaseTransform(object):
     """
     Base class for optimal transport transform methods.
-
-    .. warning::
-
-       This class should **not** be used directly. Use derived classes instead.
+    .. warning:: This class should **not** be used directly. Use derived classes instead.
     """
     def __init__(self):
         self.is_fitted = False

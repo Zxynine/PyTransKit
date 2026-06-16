@@ -16,6 +16,7 @@ import numpy.linalg as LA
 import multiprocessing as mp
 
 from pytranskit.optrans.continuous.radonscdt import RadonSCDT
+from pytranskit.optrans.continuous.transforms import RadonCDT_Engine
 
 eps = 1e-6
 x0_range = [0, 1]
@@ -39,6 +40,7 @@ class RSCDT_NS:
         self.rm_edge = rm_edge
         self.subspaces = []
         self.len_subspace = 0
+        print("working")
 
     def fit(self, Xtrain, Ytrain, no_deform_model=True):
         """Fit linear model.
@@ -144,8 +146,9 @@ class RSCDT_NS:
         x0_range=[0,1]
         x_range=[0,1]
         template=np.ones_like(I0)
-        RSCDT=RadonSCDT()
-        Ihat,ref,mpos_all,mneg_all,rad1=RSCDT.forward( x0_range, template, x_range, I0, rm_edge=False)
+        # RSCDT=RadonSCDT()
+        # Ihat,ref,mpos_all,mneg_all,rad1=RSCDT.forward( x0_range, template, x_range, I0, rm_edge=False)
+        Ihat, _ = RadonCDT_Engine.Foward(x0_range, template, x_range, I0)
         return Ihat
     
     def fun_rscdt_batch(self, data):

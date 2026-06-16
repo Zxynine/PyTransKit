@@ -4,6 +4,7 @@ import numpy.linalg as LA
 import multiprocessing as mp
 
 from pytranskit.optrans.continuous.radoncdt import RadonCDT
+from pytranskit.optrans.continuous.transforms import RadonCDT_Engine
 
 eps = 1e-6
 x0_range = [0, 1]
@@ -27,6 +28,7 @@ class RCDT_NS:
         self.rm_edge = rm_edge
         self.subspaces = []
         self.len_subspace = 0
+        print("working")
 
     def fit(self, Xtrain, Ytrain, no_deform_model=False):
         """Fit linear model.
@@ -76,7 +78,7 @@ class RCDT_NS:
         the NS method performs classification by
         
         .. math::
-            arg\min_k \| B^k (B^k)^T x - x\|^2
+            arg\\min_k \\| B^k (B^k)^T x - x\\|^2
         
         Parameters
         ----------
@@ -129,12 +131,20 @@ class RCDT_NS:
 
     def fun_rcdt_single(self, I):
         # I: (rows, columns)
-        radoncdt = RadonCDT(self.thetas)
         template = np.ones(I.shape, dtype=I.dtype)
-        Ircdt = radoncdt.forward(x0_range, template / np.sum(template), 
-                                 x_range, I / np.sum(I), 
-                                 self.rm_edge)
-        return Ircdt
+        # radoncdt = RadonCDT(self.thetas)
+        # Ircdt = radoncdt.forward(x0_range, template/np.sum(template), x_range, I/np.sum(I))
+        
+
+        # RadonCDT_Engine.theta = self.thetas
+        Ircdt, Imass = RadonCDT_Engine.Forward(x0_range, template/np.sum(template), x_range, I/np.sum(I), theta = self.thetas)
+
+        # If Ircdt comes out as (Angles, Projections) or has an extra batch dim,
+        # we transpose it to exactly match the old format expected by the classifier.
+        # If Ircdt is 3D from the new engine (1, Projections, Angles) -> squeeze and transpose:
+        if Ircdt.ndim == 3:
+            Ircdt = np.squeeze(Ircdt, axis=0) # Remove batch dimension if present
+        return Ircdt.T # Transpose to match the old code's layout
     
     def fun_rcdt_batch(self, data):
         # data: (n_samples, rows, columns)
@@ -150,6 +160,7 @@ class RCDT_NS:
     
         dataRCDT = pl.map(self.fun_rcdt_batch, splits)
         rcdt_features = np.vstack(dataRCDT)  # (n_samples, proj_len, num_angles)
+        rcdt_features = np.squeeze(rcdt_features)
         pl.close()
         pl.join()
 
@@ -161,4 +172,5 @@ class RCDT_NS:
         v1, v2 = np.cos(self.thetas*np.pi/180), np.sin(self.thetas*np.pi/180)
         v1 = np.repeat(v1[np.newaxis], rcdt_features.shape[1], axis=0)
         v2 = np.repeat(v2[np.newaxis], rcdt_features.shape[1], axis=0)
+
         return np.concatenate([rcdt_features, v1[np.newaxis], v2[np.newaxis]])

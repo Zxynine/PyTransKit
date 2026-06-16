@@ -6,6 +6,7 @@ import multiprocessing as mp
 
 from pytranskit.optrans.continuous.cdt import CDT
 from pytranskit.optrans.utils import signal_to_pdf
+from pytranskit.optrans.continuous.transforms import CDT_Engine
 
 x0_range = [0, 1]
 x1_range = [0, 1]
@@ -25,6 +26,7 @@ class CDT_NS:
         self.len_subspace = 0
         self.epsilon = 1e-8
         self.total = 1.
+        print("Working")
 
     def fit(self, Xtrain, Ytrain, no_deform_model=False):
         """Fit linear model.
@@ -115,7 +117,7 @@ class CDT_NS:
 
     def fun_cdt_single(self, sig1):
         # sig1: (0, columns)
-        cdt = CDT()
+        # cdt = CDT()
         sig0 = np.ones(sig1.shape, dtype=sig1.dtype)
         j0 = signal_to_pdf(sig0, epsilon=self.epsilon,
                                total=self.total)
@@ -125,13 +127,15 @@ class CDT_NS:
         x0 = np.linspace(x0_range[0], x0_range[1], len(j0))
         x1 = np.linspace(x1_range[0], x1_range[1], len(j1))
         
-        shat,_,_ = cdt.forward(x0, j0, x1, j1, self.rm_edge)
-        return shat
+        # shat,_,_ = cdt.forward(x0, j0, x1, j1, self.rm_edge)
+        shat,_ = CDT_Engine.Forward(x0, j0, x1, j1)
+
+        return np.asarray(shat)
     
     def fun_cdt_batch(self, data):
         # data: (n_samples, columns)
         dataCDT = [self.fun_cdt_single(data[j, :]) for j in range(data.shape[0])]
-        return np.array(dataCDT)
+        return np.asarray(dataCDT)
     
     def cdt_parallel(self, X):
         # X: (n_samples, columns)

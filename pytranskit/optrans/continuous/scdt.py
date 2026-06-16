@@ -40,7 +40,7 @@ class SCDT:
 
     def __init__(self, reference, x0=None):
         """
-        the reference (or the reference density) is normalized, its CDF its CDF's inverse are calculated
+        the reference (or the reference density) is normalized, its CDF and its CDF's inverse are calculated
         """
         assert not((1.0*reference<0).sum())
         reference = reference/reference.sum() #reference's normalization
@@ -173,7 +173,6 @@ class SCDT:
         
         scdt = SCDT(reference=s0,x0=t0)
         Ipos, Ineg, Imasspos, Imassneg = scdt.stransform(sig1, t1)
-        
         
         shat = np.concatenate((Ipos,Ineg),axis=0)
         return shat,Imasspos, Imassneg 

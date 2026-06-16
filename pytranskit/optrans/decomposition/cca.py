@@ -23,7 +23,7 @@ class CCA():
         The tolerance used in the iterative algorithm.
     copy : bool (default=True)
         Whether the deflation be done on a copy. Let the default value to True
-        unless you don’t care about side effects.
+        unless you dont care about side effects.
 
     Attributes
     ----------
