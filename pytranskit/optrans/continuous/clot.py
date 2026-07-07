@@ -179,30 +179,42 @@ class CLOT():
         xv, yv = np.meshgrid(np.arange(w, dtype=float), np.arange(h, dtype=float))
         fill_val = min(sig0.min(), sig1.min())
 
-        # 1. Integrate images along y-direction
-        sum0 = signal_to_pdf(sig0.sum(axis=0))
-        sum1 = signal_to_pdf(sig1.sum(axis=0))
+        # 1. Horizontal Pass: Calculate clean PDFs over a [0, 1] normalized grid
+        sum0 = jnp.clip(jnp.asarray(signal_to_pdf(sig0.sum(axis=0), epsilon=1e-4)), 1e-7, None)
+        sum1 = jnp.clip(jnp.asarray(signal_to_pdf(sig1.sum(axis=0), epsilon=1e-4)), 1e-7, None)
 
-        # Compute horizontal mapping via your new functional CDT Engine
-        x0_grid = jnp.arange(w, dtype=float)
-        x1_grid = jnp.arange(w, dtype=float)
+        # EXTERNAL FIX: Define the input domains on a [0, 1] normalized scale
+        x0_grid = jnp.linspace(0, 1, w)
+        x1_grid = jnp.linspace(0, 1, w)
         
+        # This will now cleanly execute through the unmodified CDT Engine
         map_x, _ = CDT_Engine.Forward(x0_grid, sum0, x1_grid, sum1)
         
-        # Scale horizontal map from normalized [0, 1] to pixel domain [0, w-1]
+        # Scale the resulting normalized map back to the native pixel domain [0, w-1]
         a = np.tile(np.array(map_x) * (w - 1), (h, 1))
         aprime = np.gradient(a, axis=1)
 
         # Compute a'(x)sig1(a(x),y) for all y
-        siga = aprime * interp2d(sig1, np.stack((yv, a)), fill_value=fill_val)
+        siga_raw = aprime * interp2d(sig1, np.stack((yv, a)), fill_value=fill_val)
 
-        # 2. Vectorized Column-Wise Processing via Trimming & Transposition
-        col_grid = jnp.arange(h, dtype=float)
+        # Normalize intermediate columns to safe vertical PDFs
+        siga_clean = np.zeros_like(siga_raw)
+        for col in range(w):
+            siga_clean[:, col] = signal_to_pdf(siga_raw[:, col], epsilon=1e-4)
+
+        # 2. Vertical Pass: Vectorized Column-Wise Processing
+        sig0_t = jnp.asarray(sig0.T)
+        siga_t = jnp.asarray(siga_clean.T)
+
+        # EXTERNAL FIX: Set up the vertical tracking dimension on a [0, 1] grid 
+        # and broadcast it to match the transposed batch size (w columns)
+        col_grid_base = jnp.linspace(0, 1, h)
+        col_grid = jnp.broadcast_to(col_grid_base, (w, h))
         
         # Batch transform across all columns simultaneously
-        map_y_batched, _ = CDT_Engine.Forward(col_grid, sig0.T, col_grid, siga.T)
+        map_y_batched, _ = CDT_Engine.Forward(col_grid, sig0_t, col_grid, siga_t)
         
-        # Scale vertical map from normalized [0, 1] to pixel domain [0, h-1]
+        # Retranspose and scale the normalized map back to vertical pixel domain [0, h-1]
         b = np.array(map_y_batched).T * (h - 1)
 
         # Clean up unmapped/empty boundary columns
@@ -212,6 +224,9 @@ class CLOT():
                 b[:, z] = b[:, z + 1] if z == 0 else b[:, z - 1]
 
         return np.stack((b, a))
+    
+
+
     def apply_forward_map(self, transport_map, sig1):
         """
         Apply forward transport map.

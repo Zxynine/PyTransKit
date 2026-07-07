@@ -160,6 +160,7 @@ class RCDT_NS:
     
         dataRCDT = pl.map(self.fun_rcdt_batch, splits)
         rcdt_features = np.vstack(dataRCDT)  # (n_samples, proj_len, num_angles)
+        print(rcdt_features.shape)
         rcdt_features = np.squeeze(rcdt_features)
         pl.close()
         pl.join()
