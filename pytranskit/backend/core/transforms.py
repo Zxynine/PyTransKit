@@ -109,8 +109,8 @@ class RadonCDT_Engine(ITransportEngine):
     @staticmethod
     @jax.jit
     def Forward(xref, yref, xsig, ysig, theta=None):
-        rad0 = jax_radon(yref, theta=theta)
-        rad1 = jax_radon(ysig, theta=theta)
+        rad0 = jax_radon(yref, theta=theta) + 1e-15
+        rad1 = jax_radon(ysig, theta=theta) + 1e-15
         
         x0 = jnp.linspace(xref[0], xref[1], rad0.shape[-1])
         x1 = jnp.linspace(xsig[0], xsig[1], rad0.shape[-1])
@@ -120,12 +120,12 @@ class RadonCDT_Engine(ITransportEngine):
     @staticmethod
     @jax.jit
     def Inverse(state, xref, yref, theta=None):
-        rad0 = jax_radon(yref, theta=theta)
+        rad0 = jax_radon(yref, theta=theta) + 1e-15
 
         x0 = jnp.linspace(xref[0], xref[1], rad0.shape[-1])
         
         warped = CDT_Engine.Inverse(state, x0, rad0) # (Batch, Angles, Projections)
-        return jax_iradon(warped, output_size=yref.shape[-1], theta=theta) 
+        return jax_iradon(warped - 1e-15, output_size=yref.shape[-1], theta=theta) 
     
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -157,6 +157,7 @@ class Transformer:
 
     def Forward(self, xsig, ysig):
         return self.Engine.Forward(self.xref, self.yref, xsig,ysig)
+    
     def Inverse(self, state: TransportState, xnew=None):
         xref = xnew if xnew is not None else self.xref
         return self.Engine.Inverse(state, xref, self.yref)
@@ -196,7 +197,6 @@ def jax_radon(img_batch, theta=None):
     # Normalize and force shape to (Batch, H, W)
     h, w = img_arr.shape[-2], img_arr.shape[-1]
     img_arr = img_arr.reshape(-1, h, w) if img_arr.ndim > 2 else img_arr[None, ...]
-    # img_arr /= jnp.sum(img_arr, axis=(-2, -1), keepdims=True)
     
     # Geometry Setup - Single static coordinate plane
     target_bins = int(math.floor(math.sqrt(2) * max(h, w)) + 1)
@@ -206,8 +206,6 @@ def jax_radon(img_batch, theta=None):
     # Pre-calculate trig constants for the inner scan loop
     rad = jnp.deg2rad(theta)
     cos_a, sin_a = jnp.cos(rad), jnp.sin(rad)
-    cos_sin_pairs = jnp.stack([cos_a, sin_a], axis=1) # Shape: (Angles, 2)
-
 
     # Shape layout: (Angles, 2, target_bins, target_bins)
     all_coords = jax.vmap(lambda c, s: jnp.stack([-s * X + c * Y + mid, c * X + s * Y + mid], axis=0))(cos_a, sin_a)
