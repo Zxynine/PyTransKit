@@ -6,7 +6,7 @@ from typing import NamedTuple, Tuple, Any, Callable
 import math
 
 
-from ..utils.probability import _normalize, _cdf, interp_batch
+from .utils.probability import _normalize, _cdf, interp_batch
 
 
 """

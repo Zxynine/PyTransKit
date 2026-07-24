@@ -60,28 +60,14 @@ class DiscreteLOT:
 
 
     def _solve_ot(self, C, a0, a1):
-        N0 = len(a0)
-        N1 = len(a1)
+        (N0, N1) = (len(a0), len(a1))
 
-        # Linear variable track expanded to a 2D row vector: Shape (1, N0 * N1)
-        linear_indices = np.arange(N0 * N1)[None, :]
-
-        # Row constraints: Map matching source indices. Shape: (N0, N0 * N1)
-        row_mask = (np.arange(N0)[:, None] == linear_indices // N1)
-        # Column constraints: Map matching target indices. Shape: (N1, N0 * N1)
-        col_mask = (np.arange(N1)[:, None] == linear_indices % N1)
+        linear_indices = np.arange(N0 * N1)[None, :] # Shape (1, N0 * N1)
+        row_mask = (np.arange(N0)[:, None] == linear_indices // N1) # Shape: (N0, N0 * N1)
+        col_mask = (np.arange(N1)[:, None] == linear_indices % N1)  # Shape: (N1, N0 * N1)
 
         # Total shape will be (N0 + N1, N0 * N1)
-        dense_boolean_stack = np.vstack([row_mask, col_mask])
-        A_eq = csr_matrix(dense_boolean_stack, dtype=np.float64)
-
-        # A_eq = np.zeros((N0 + N1, N0 * N1))
-
-        # # Row constraints (source)
-        # for i in range(N0): A_eq[i, i * N1:(i + 1) * N1] = 1
-        # # Column constraints (target)
-        # for j in range(N1): A_eq[N0 + j, j::N1] = 1
-
+        A_eq = csr_matrix(np.vstack([row_mask, col_mask]), dtype=np.float64)
         b_eq = np.concatenate([a0, a1])
 
         res = linprog(
@@ -130,8 +116,7 @@ class DiscreteLOT:
         s1_hat : array (N0, d)
         a1_hat : array (N0,)
         """
-        if not self.fitted_:
-            raise RuntimeError("Call fit() before transform().")
+        if not self.fitted_: raise RuntimeError("Call fit() before transform().")
 
         X1, a1 = _prep_inputs(X1, a1, self.normalize)
 

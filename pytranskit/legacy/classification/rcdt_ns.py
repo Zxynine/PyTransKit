@@ -3,7 +3,7 @@ import numpy as np
 import numpy.linalg as LA
 import multiprocessing as mp
 
-from pytranskit.backend.core.transforms import RadonCDT_Engine
+from pytranskit.backend.transforms import RadonCDT_Engine
 
 eps = 1e-6
 x0_range = [0, 1]

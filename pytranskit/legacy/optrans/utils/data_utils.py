@@ -36,14 +36,9 @@ def signal_to_pdf(input, sigma=0., epsilon=1e-8, total=1.):
     """
     input = check_array(input, dtype=['float32','float64'])
 
-    if sigma < 0:
-        raise ValueError('sigma must be >= 0.')
-
-    if epsilon <= 0:
-        raise ValueError('epsilon must be > 0.')
-
-    if total <= 0:
-        raise ValueError('total must be > 0.')
+    if sigma < 0: raise ValueError('sigma must be >= 0.')
+    if epsilon <= 0: raise ValueError('epsilon must be > 0.')
+    if total <= 0: raise ValueError('total must be > 0.')
     
     pdf = gaussian_filter(input, sigma)
     pdf /= pdf.sum()

@@ -4,9 +4,8 @@ import numpy as np
 import numpy.linalg as LA
 import multiprocessing as mp
 
-from pytranskit.legacy.optrans.continuous.cdt import CDT
 from pytranskit.legacy.optrans.utils import signal_to_pdf
-from pytranskit.backend.core.transforms import CDT_Engine
+from pytranskit.backend.transforms import CDT_Engine
 
 x0_range = [0, 1]
 x1_range = [0, 1]

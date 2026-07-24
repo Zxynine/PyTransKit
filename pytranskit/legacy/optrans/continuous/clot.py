@@ -4,7 +4,7 @@ from scipy.fftpack import dct, idct
 from .cdt import CDT
 from ..utils import check_array, assert_equal_shape, signal_to_pdf, interp2d, griddata2d
 
-from pytranskit.legacy.optrans.continuous.transforms import CDT_Engine
+from pytranskit.backend.core.transforms import CDT_Engine
 
 
 

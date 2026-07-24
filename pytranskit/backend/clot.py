@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.fftpack import dct, idct
 
-from ..utils import check_array, assert_equal_shape, signal_to_pdf, interp2d, griddata2d
+from ...legacy.utils import check_array, assert_equal_shape, signal_to_pdf, interp2d, griddata2d
 
 from pytranskit.backend.core.transforms import CDT_Engine
 
@@ -12,13 +12,26 @@ from scipy.fft import dct, idct
 
 
 
+
+
+def _check_get_detJ(transport_map, sig):
+    transport_map = check_array(transport_map, ndim=3, dtype=[np.float64, np.float32])
+    sig = check_array(sig, ndim=2, dtype=[np.float64, np.float32], force_strictly_positive=True)
+    assert_equal_shape(transport_map[0], sig, ['transport_map', 'signal'])
+    
+    f0y, f0x = np.gradient(transport_map[0])
+    f1y, f1x = np.gradient(transport_map[1])
+    detJ = (f1x * f0y) - (f1y * f0x)
+    return detJ
+
+
+
+
 class CLOT():
     """
     Continuous Linear Optimal Transport Transform.
 
-    This uses Nesterov's accelerated gradient descent to remove the curl in the
-    initial mapping, utilizing the accelerated JAX CDT_Engine for initialization.
-
+    This uses Nesterov's accelerated gradient descent to remove the curl in the initial mapping
     Parameters
     ----------
     lr : float (default=0.01)
@@ -99,21 +112,17 @@ class CLOT():
             # Nesterov momentum "look ahead"
             f -= self.momentum * update_prev
 
-            # Jacobian and its determinant
-            f0y, f0x = np.gradient(f[0])
-            f1y, f1x = np.gradient(f[1])
-            
-            # Update evaluation measures
             cost = np.sum(((yv - f[0])**2 + (xv - f[1])**2) * sig0)
             self.cost_.append(cost)
+
+            f0y, f0x = np.gradient(f[0])
+            f1y, f1x = np.gradient(f[1])
             curl = 0.5 * (f0x - f1y)
             self.curl_.append(0.5 * np.sum(curl**2))
 
             # Print metrics
-            if self.verbose:
-                print(f'Iteration {i:>4} -- cost = {self.cost_[-1]:.4e}')
-            if self.verbose > 1:
-                print(f'... curl = {self.curl_[-1]:.4e}')
+            if self.verbose: print(f'Iteration {i:>4} -- cost = {self.cost_[-1]:.4e}')
+            if self.verbose > 1: print(f'... curl = {self.curl_[-1]:.4e}')
 
             # Divergence
             vx = np.gradient(-f[0] + yv, axis=1)
@@ -155,46 +164,45 @@ class CLOT():
         return lot
     
     def _get_initial_map(self, sig0, sig1):
-        """Get initial transport map utilizing vectorized CDT execution with pixel scaling."""
+        """Get initial transport map utilizing vectorized CDT execution"""
         h, w = sig0.shape
         xv, yv = np.meshgrid(np.arange(w, dtype=float), np.arange(h, dtype=float))
-        fill_val = min(sig0.min(), sig1.min())
 
-        # 1. Horizontal Pass: Calculate clean PDFs over a [0, 1] normalized grid
         sum0 = jnp.clip(jnp.asarray(signal_to_pdf(sig0.sum(axis=0), epsilon=1e-4)), 1e-7, None)
         sum1 = jnp.clip(jnp.asarray(signal_to_pdf(sig1.sum(axis=0), epsilon=1e-4)), 1e-7, None)
 
-        # EXTERNAL FIX: Define the input domains on a [0, 1] normalized scale
         x0_grid = jnp.linspace(0, 1, w)
         x1_grid = jnp.linspace(0, 1, w)
         
-        # This will now cleanly execute through the unmodified CDT Engine
+        # CDT Calculation
         map_x, _ = CDT_Engine.Forward(x0_grid, sum0, x1_grid, sum1)
         
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
         # Scale the resulting normalized map back to the native pixel domain [0, w-1]
         a = np.tile(np.array(map_x) * (w - 1), (h, 1))
         aprime = np.gradient(a, axis=1)
 
         # Compute a'(x)sig1(a(x),y) for all y
+        fill_val = min(sig0.min(), sig1.min())
         siga_raw = aprime * interp2d(sig1, np.stack((yv, a)), fill_value=fill_val)
 
         # Normalize intermediate columns to safe vertical PDFs
         siga_clean = np.zeros_like(siga_raw)
-        for col in range(w):
-            siga_clean[:, col] = signal_to_pdf(siga_raw[:, col], epsilon=1e-4)
+        for col in range(w): siga_clean[:, col] = signal_to_pdf(siga_raw[:, col], epsilon=1e-4)
 
-        # 2. Vertical Pass: Vectorized Column-Wise Processing
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
         sig0_t = jnp.asarray(sig0.T)
         siga_t = jnp.asarray(siga_clean.T)
 
-        # EXTERNAL FIX: Set up the vertical tracking dimension on a [0, 1] grid 
-        # and broadcast it to match the transposed batch size (w columns)
         col_grid_base = jnp.linspace(0, 1, h)
         col_grid = jnp.broadcast_to(col_grid_base, (w, h))
         
-        # Batch transform across all columns simultaneously
         map_y_batched, _ = CDT_Engine.Forward(col_grid, sig0_t, col_grid, siga_t)
         
+        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
         # Retranspose and scale the normalized map back to vertical pixel domain [0, h-1]
         b = np.array(map_y_batched).T * (h - 1)
 
@@ -224,14 +232,9 @@ class CLOT():
         sig0_recon : array, shape (height, width)
             Reconstructed reference signal sig0.
         """
-        transport_map = check_array(transport_map, ndim=3, dtype=[np.float64, np.float32])
-        sig1 = check_array(sig1, ndim=2, dtype=[np.float64, np.float32], force_strictly_positive=True)
-        assert_equal_shape(transport_map[0], sig1, ['transport_map', 'sig1'])
+        
 
-        f0y, f0x = np.gradient(transport_map[0])
-        f1y, f1x = np.gradient(transport_map[1])
-        detJ = (f1x * f0y) - (f1y * f0x)
-
+        detJ = _check_get_detJ(transport_map, sig1)
         return detJ * interp2d(sig1, transport_map, fill_value=sig1.min())
 
     def apply_inverse_map(self, transport_map, sig0):
@@ -250,12 +253,6 @@ class CLOT():
         sig1_recon : array, shape (height, width)
             Reconstructed signal sig1.
         """
-        transport_map = check_array(transport_map, ndim=3, dtype=[np.float64, np.float32])
-        sig0 = check_array(sig0, ndim=2, dtype=[np.float64, np.float32], force_strictly_positive=True)
-        assert_equal_shape(transport_map[0], sig0, ['transport_map', 'sig0'])
 
-        f0y, f0x = np.gradient(transport_map[0])
-        f1y, f1x = np.gradient(transport_map[1])
-        detJ = (f1x * f0y) - (f1y * f0x)
-
+        detJ = _check_get_detJ(transport_map, sig0)
         return griddata2d(sig0 / detJ, transport_map, fill_value=sig0.min())
